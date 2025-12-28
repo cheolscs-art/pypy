@@ -1,150 +1,149 @@
 import streamlit as st
-import os
+import random
 
-# --- 1. 페이지 및 스타일 설정 (Denon Antique 테마) ---
-st.set_page_config(page_title="DENON Antique Audio System", layout="centered")
+# --- 페이지 설정 ---
+st.set_page_config(page_title="Neon Visualizer Audio", layout="centered")
 
-# 사용자 정의 CSS로 레트로 느낌 구현
-st.markdown("""
-    <style>
-    .stApp {
-        background-color: #2d2d2d;
-    }
-    .main-panel {
-        background-color: #d4c8b4;
-        padding: 20px;
-        border-radius: 10px;
-        border: 4px solid #a89f8e;
-    }
-    .lcd-display {
-        background-color: #000000;
-        color: #00ff00;
-        font-family: 'Courier New', Courier, monospace;
-        padding: 15px;
-        border: 4px inset #555;
-        margin-bottom: 20px;
-        text-align: center;
-        border-radius: 5px;
-    }
-    .lcd-title {
-        font-size: 1.2em;
-        font-weight: bold;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .lcd-time {
-        font-size: 2em;
-        font-weight: bold;
-        margin-bottom: 10px;
-    }
-    /* 버튼 스타일 조정 */
-    .stButton > button {
-        background-color: #e0d5c5;
-        color: black;
-        border: 2px solid #999;
-        font-weight: bold;
-        width: 100%;
-    }
-    .stButton > button:hover {
-        background-color: #cbbba6;
-        border-color: #0078d7;
-    }
-    </style>
+# --- 시각화 및 스타일 CSS ---
+def apply_advanced_style():
+    st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        
+        .stApp { background-color: #050505; }
+        
+        /* 메인 플레이어 카드 */
+        .player-card {
+            background: rgba(20, 20, 20, 0.95);
+            border-radius: 30px;
+            padding: 40px;
+            border: 1px solid #333;
+            box-shadow: 0 0 50px rgba(0, 255, 127, 0.1);
+            text-align: center;
+        }
+
+        /* 네온 비주얼라이저 컨테이너 */
+        .visualizer-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            height: 100px;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+
+        /* 이퀄라이저 바 애니메이션 */
+        .bar {
+            width: 10px;
+            background: linear-gradient(to top, #00ff7f, #00d4ff);
+            border-radius: 10px 10px 0 0;
+            animation: equalize 1.2s infinite ease-in-out;
+            box-shadow: 0 0 15px rgba(0, 255, 127, 0.5);
+        }
+
+        @keyframes equalize {
+            0% { height: 10px; }
+            50% { height: 100px; }
+            100% { height: 10px; }
+        }
+
+        /* 바마다 애니메이션 속도 차이 부여 */
+        .bar:nth-child(1)  { animation-duration: 0.4s; }
+        .bar:nth-child(2)  { animation-duration: 0.7s; }
+        .bar:nth-child(3)  { animation-duration: 0.5s; }
+        .bar:nth-child(4)  { animation-duration: 0.9s; }
+        .bar:nth-child(5)  { animation-duration: 0.6s; }
+        .bar:nth-child(6)  { animation-duration: 0.8s; }
+        .bar:nth-child(7)  { animation-duration: 0.5s; }
+        .bar:nth-child(8)  { animation-duration: 0.7s; }
+
+        /* 곡 정보 텍스트 */
+        .track-info {
+            font-family: 'Orbitron', sans-serif;
+            color: #00ff7f;
+            text-shadow: 0 0 10px rgba(0, 255, 127, 0.5);
+            margin-top: 20px;
+        }
+        
+        /* 기본 오디오 플레이어 숨기기/커스텀 */
+        audio {
+            filter: invert(1) hue-rotate(90deg) brightness(1.5);
+            width: 100%;
+            margin-top: 20px;
+        }
+        </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 세션 상태 관리 (플레이리스트 및 현재 곡) ---
+apply_advanced_style()
+
+# --- 상태 관리 ---
 if 'playlist' not in st.session_state:
     st.session_state.playlist = []
-if 'current_index' not in st.session_state:
-    st.session_state.current_index = 0
+if 'current_idx' not in st.session_state:
+    st.session_state.current_idx = 0
 
-# --- 3. 로직 함수 ---
-def next_song():
-    if st.session_state.playlist and st.session_state.current_index < len(st.session_state.playlist) - 1:
-        st.session_state.current_index += 1
+# --- UI 레이아웃 ---
+st.markdown("<h1 style='text-align: center; color: white;'>NEON <span style='color: #00ff7f;'>BEAT</span> PLAYER</h1>", unsafe_allow_html=True)
 
-def prev_song():
-    if st.session_state.playlist and st.session_state.current_index > 0:
-        st.session_state.current_index -= 1
+# 파일 업로더
+with st.expander("🎵 음악 라이브러리에 곡 추가"):
+    files = st.file_uploader("MP3 파일을 업로드하세요", type=['mp3'], accept_multiple_files=True)
+    if files:
+        for f in files:
+            if f not in st.session_state.playlist:
+                st.session_state.playlist.append(f)
 
-def clear_playlist():
-    st.session_state.playlist = []
-    st.session_state.current_index = 0
+# 메인 플레이어 영역
+st.markdown('<div class="player-card">', unsafe_allow_html=True)
 
-# --- 4. UI 구성 ---
-
-# 제목
-st.title("DENON Antique Audio System")
-
-# 파일 업로더 (Tkinter의 filedialog 대체)
-uploaded_files = st.file_uploader("ADD SONGS (MP3, WAV, OGG)", type=['mp3', 'wav', 'ogg'], accept_multiple_files=True)
-
-# 파일이 업로드되면 플레이리스트에 추가
-if uploaded_files:
-    for uploaded_file in uploaded_files:
-        # 중복 방지: 파일명이 이미 있는지 확인
-        if uploaded_file not in st.session_state.playlist:
-            st.session_state.playlist.append(uploaded_file)
-
-# 메인 패널 시작
-with st.container():
-    st.markdown('<div class="main-panel">', unsafe_allow_html=True)
-
-    # 현재 재생 중인 곡 정보 가져오기
-    current_song_name = "INSERT DISC"
-    current_file = None
+if st.session_state.playlist:
+    curr_file = st.session_state.playlist[st.session_state.current_idx]
     
-    if st.session_state.playlist:
-        # 인덱스 안전 장치
-        if st.session_state.current_index >= len(st.session_state.playlist):
-            st.session_state.current_index = 0
-            
-        current_file = st.session_state.playlist[st.session_state.current_index]
-        current_song_name = current_file.name.upper()
-
-    # LCD 디스플레이 (HTML/CSS로 구현)
+    # 시각화 바 (CSS 애니메이션)
+    # 재생 중일 때만 바가 움직이는 효과를 위해 HTML 생성
+    visualizer_html = '<div class="visualizer-container">'
+    for i in range(12):
+        visualizer_html += '<div class="bar"></div>'
+    visualizer_html += '</div>'
+    st.markdown(visualizer_html, unsafe_allow_html=True)
+    
+    # 곡 정보
     st.markdown(f"""
-        <div class="lcd-display">
-            <div class="lcd-time">-- : --</div>
-            <div class="lcd-title">TRACK {st.session_state.current_index + 1}: {current_song_name}</div>
-            <div style="font-size: 0.8em; color: #00aa00; margin-top:5px;">{'I' * 24}</div>
+        <div class="track-info">
+            <div style="font-size: 0.8rem; opacity: 0.7;">NOW PLAYING</div>
+            <div style="font-size: 1.4rem; font-weight: bold; margin-top:5px;">{curr_file.name}</div>
         </div>
     """, unsafe_allow_html=True)
-
-    # 컨트롤 버튼 (컬럼으로 배치)
-    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
     
+    # 오디오 플레이어
+    st.audio(curr_file)
+    
+    # 컨트롤 버튼
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        st.button("◀◀ PREV", on_click=prev_song)
+        if st.button("⏮ PREV"):
+            st.session_state.current_idx = (st.session_state.current_idx - 1) % len(st.session_state.playlist)
+            st.rerun()
     with col2:
-        # Streamlit은 자동 재생 제어가 까다로우므로 플레이 버튼은 오디오 위젯으로 대체됨
-        st.button("STOP ■", on_click=lambda: None) 
+        st.write("") # 간격용
     with col3:
-        st.button("NEXT ▶▶", on_click=next_song)
-    with col4:
-        if st.button("CLEAR"):
-            clear_playlist()
+        if st.button("NEXT ⏭"):
+            st.session_state.current_idx = (st.session_state.current_idx + 1) % len(st.session_state.playlist)
+            st.rerun()
+else:
+    st.markdown("<p style='color: #666;'>플레이리스트가 비어 있습니다.</p>", unsafe_allow_html=True)
 
-    st.markdown("---")
+st.markdown('</div>', unsafe_allow_html=True)
 
-    # 오디오 플레이어 (Pygame 대신 st.audio 사용)
-    if current_file:
-        st.audio(current_file, format='audio/mp3')
-        st.caption("Volume is controlled by your device system.")
-    else:
-        st.info("Please add music files above.")
-
-    st.markdown('</div>', unsafe_allow_html=True) # 메인 패널 닫기
-
-# --- 5. 플레이리스트 목록 표시 ---
-with st.expander("TRACK LIST", expanded=True):
-    if st.session_state.playlist:
-        for idx, file in enumerate(st.session_state.playlist):
-            # 현재 재생 중인 곡 강조
-            prefix = "▶ " if idx == st.session_state.current_index else f"{idx+1}. "
-            if st.button(f"{prefix}{file.name}", key=f"song_{idx}"):
-                st.session_state.current_index = idx
-                st.rerun()
-    else:
-        st.write("No tracks loaded.")
+# 하단 플레이리스트
+st.markdown("### 🎧 PLAYLIST")
+for i, f in enumerate(st.session_state.playlist):
+    is_active = i == st.session_state.current_idx
+    col_a, col_b = st.columns([0.1, 0.9])
+    with col_a:
+        if is_active: st.markdown("🔥")
+        else: st.markdown(f"{i+1}")
+    with col_b:
+        if st.button(f.name, key=f"p_{i}", use_container_width=True):
+            st.session_state.current_idx = i
+            st.rerun()
