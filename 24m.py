@@ -1,204 +1,150 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import pygame
+import streamlit as st
 import os
-import random
 
-# --- 스타일 설정 (Denon Antique 테마) ---
-SKIN_BG = "#d4c8b4"    
-LCD_BG = "#000000"     
-LCD_FG = "#00ff00"     
-BTN_COLOR = "#e0d5c5"  
+# --- 1. 페이지 및 스타일 설정 (Denon Antique 테마) ---
+st.set_page_config(page_title="DENON Antique Audio System", layout="centered")
 
-class DenonUltimatePlayer:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("DENON Antique Audio System")
-        self.root.geometry("460x720")
-        self.root.configure(bg="#2d2d2d")
-        self.root.resizable(False, False)
+# 사용자 정의 CSS로 레트로 느낌 구현
+st.markdown("""
+    <style>
+    .stApp {
+        background-color: #2d2d2d;
+    }
+    .main-panel {
+        background-color: #d4c8b4;
+        padding: 20px;
+        border-radius: 10px;
+        border: 4px solid #a89f8e;
+    }
+    .lcd-display {
+        background-color: #000000;
+        color: #00ff00;
+        font-family: 'Courier New', Courier, monospace;
+        padding: 15px;
+        border: 4px inset #555;
+        margin-bottom: 20px;
+        text-align: center;
+        border-radius: 5px;
+    }
+    .lcd-title {
+        font-size: 1.2em;
+        font-weight: bold;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .lcd-time {
+        font-size: 2em;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+    /* 버튼 스타일 조정 */
+    .stButton > button {
+        background-color: #e0d5c5;
+        color: black;
+        border: 2px solid #999;
+        font-weight: bold;
+        width: 100%;
+    }
+    .stButton > button:hover {
+        background-color: #cbbba6;
+        border-color: #0078d7;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-        pygame.mixer.init()
-        
-        self.playlist = []
-        self.current_idx = -1
-        self.is_paused = False
-        self.song_length = 0
-        self.is_dragging = False
-        self.seek_offset = 0
+# --- 2. 세션 상태 관리 (플레이리스트 및 현재 곡) ---
+if 'playlist' not in st.session_state:
+    st.session_state.playlist = []
+if 'current_index' not in st.session_state:
+    st.session_state.current_index = 0
 
-        self.setup_ui()
-        self.listbox.bind('<Delete>', lambda e: self.delete_selected_song())
-        self.update_timer()
+# --- 3. 로직 함수 ---
+def next_song():
+    if st.session_state.playlist and st.session_state.current_index < len(st.session_state.playlist) - 1:
+        st.session_state.current_index += 1
 
-    def setup_ui(self):
-        self.main_panel = tk.Frame(self.root, bg=SKIN_BG, bd=4, relief=tk.RAISED)
-        self.main_panel.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+def prev_song():
+    if st.session_state.playlist and st.session_state.current_index > 0:
+        st.session_state.current_index -= 1
 
-        display_frame = tk.Frame(self.main_panel, bg=LCD_BG, bd=5, relief=tk.SUNKEN)
-        display_frame.place(x=15, y=15, width=420, height=150)
+def clear_playlist():
+    st.session_state.playlist = []
+    st.session_state.current_index = 0
 
-        self.time_label = tk.Label(display_frame, text="00:00 / 00:00", font=("Courier New", 18, "bold"), bg=LCD_BG, fg=LCD_FG)
-        self.time_label.place(x=10, y=10)
+# --- 4. UI 구성 ---
 
-        self.title_label = tk.Label(display_frame, text="INSERT DISC", font=("Arial", 10), bg=LCD_BG, fg=LCD_FG, anchor="w")
-        self.title_label.place(x=10, y=50, width=390)
+# 제목
+st.title("DENON Antique Audio System")
 
-        self.canvas = tk.Canvas(display_frame, bg=LCD_BG, highlightthickness=0)
-        self.canvas.place(x=10, y=80, width=390, height=60)
-        self.bars = [self.canvas.create_rectangle(i*16, 60, i*16 + 12, 60, fill=LCD_FG, outline="") for i in range(24)]
+# 파일 업로더 (Tkinter의 filedialog 대체)
+uploaded_files = st.file_uploader("ADD SONGS (MP3, WAV, OGG)", type=['mp3', 'wav', 'ogg'], accept_multiple_files=True)
 
-        self.progress_scale = tk.Scale(
-            self.main_panel, from_=0, to=100, orient=tk.HORIZONTAL,
-            bg=SKIN_BG, troughcolor="#444", highlightthickness=0, showvalue=False,
-            command=self.on_scale_touch
-        )
-        self.progress_scale.place(x=20, y=175, width=410)
-        self.progress_scale.bind("<Button-1>", self.on_drag_start)
-        self.progress_scale.bind("<ButtonRelease-1>", self.seek_music)
+# 파일이 업로드되면 플레이리스트에 추가
+if uploaded_files:
+    for uploaded_file in uploaded_files:
+        # 중복 방지: 파일명이 이미 있는지 확인
+        if uploaded_file not in st.session_state.playlist:
+            st.session_state.playlist.append(uploaded_file)
 
-        # 버튼 섹션
-        btn_frame = tk.Frame(self.main_panel, bg=SKIN_BG)
-        btn_frame.place(x=20, y=220, width=410)
-        
-        # 기본 스타일에서 bg를 제외한 공통 스타일 정의
-        common_ops = {"font": ("Arial", 9, "bold"), "relief": tk.RAISED, "bd": 3, "width": 5}
-        
-        tk.Button(btn_frame, text="◀◀", command=self.prev_song, bg=BTN_COLOR, **common_ops).grid(row=0, column=0, padx=3)
-        # 에러 수정된 부분: bg를 중복되지 않게 한 번만 선언
-        tk.Button(btn_frame, text="▶", command=self.play_song, bg="#0078d7", fg="white", **common_ops).grid(row=0, column=1, padx=3)
-        tk.Button(btn_frame, text="||", command=self.pause_song, bg=BTN_COLOR, **common_ops).grid(row=0, column=2, padx=3)
-        tk.Button(btn_frame, text="■", command=self.stop_song, bg=BTN_COLOR, **common_ops).grid(row=0, column=3, padx=3)
-        tk.Button(btn_frame, text="▶▶", command=self.next_song, bg=BTN_COLOR, **common_ops).grid(row=0, column=4, padx=3)
-        tk.Button(btn_frame, text="ADD", command=self.add_songs, bg="#bcae99", width=7, relief=tk.RAISED, bd=3).grid(row=0, column=5, padx=10)
+# 메인 패널 시작
+with st.container():
+    st.markdown('<div class="main-panel">', unsafe_allow_html=True)
 
-        vol_frame = tk.Frame(self.main_panel, bg=SKIN_BG)
-        vol_frame.place(x=20, y=275, width=410)
-
-        tk.Label(vol_frame, text="VOLUME", bg=SKIN_BG, font=("Arial", 8, "bold")).pack(side=tk.LEFT, padx=5)
-        self.vol_scale = tk.Scale(
-            vol_frame, from_=0, to=100, orient=tk.HORIZONTAL,
-            bg=SKIN_BG, troughcolor="#bcae99", highlightthickness=0, showvalue=False,
-            command=self.set_volume
-        )
-        self.vol_scale.set(70)
-        self.vol_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
-        
-        self.vol_label = tk.Label(vol_frame, text="70%", bg=LCD_BG, fg=LCD_FG, font=("Courier New", 9, "bold"), width=5)
-        self.vol_label.pack(side=tk.RIGHT, padx=5)
-
-        list_tools = tk.Frame(self.main_panel, bg=SKIN_BG)
-        list_tools.place(x=20, y=325, width=410)
-        tk.Label(list_tools, text="TRACK LIST", bg=SKIN_BG, font=("Arial", 9, "bold")).pack(side=tk.LEFT)
-        tk.Button(list_tools, text="DELETE", command=self.delete_selected_song, bg="#cc0000", fg="white", font=("Arial", 8), bd=1).pack(side=tk.RIGHT)
-
-        self.listbox = tk.Listbox(
-            self.main_panel, bg="#1a1a1a", fg=SKIN_BG, 
-            selectbackground=LCD_FG, selectforeground="black", 
-            font=("Malgun Gothic", 10), bd=2, highlightthickness=0
-        )
-        self.listbox.place(x=20, y=350, width=410, height=310)
-        self.listbox.bind("<Double-Button-1>", lambda e: self.play_song())
-
-    # --- 기능 로직 (동일) ---
-
-    def add_songs(self):
-        files = filedialog.askopenfilenames(filetypes=[("Audio Files", "*.mp3 *.wav *.ogg")])
-        for f in files:
-            self.playlist.append(f)
-            self.listbox.insert(tk.END, f"{len(self.playlist)}. {os.path.basename(f)}")
-
-    def play_song(self):
-        selected = self.listbox.curselection()
-        if selected:
-            self.current_idx = selected[0]
-            path = self.playlist[self.current_idx]
-            pygame.mixer.music.load(path)
-            pygame.mixer.music.play()
+    # 현재 재생 중인 곡 정보 가져오기
+    current_song_name = "INSERT DISC"
+    current_file = None
+    
+    if st.session_state.playlist:
+        # 인덱스 안전 장치
+        if st.session_state.current_index >= len(st.session_state.playlist):
+            st.session_state.current_index = 0
             
-            sound = pygame.mixer.Sound(path)
-            self.song_length = sound.get_length()
-            self.progress_scale.config(to=self.song_length)
-            self.seek_offset = 0
-            self.title_label.config(text=os.path.basename(path).upper())
-            self.is_paused = False
+        current_file = st.session_state.playlist[st.session_state.current_index]
+        current_song_name = current_file.name.upper()
 
-    def pause_song(self):
-        if self.current_idx == -1: return
-        if not self.is_paused:
-            pygame.mixer.music.pause()
-            self.is_paused = True
-            self.title_label.config(text="PAUSED")
-        else:
-            pygame.mixer.music.unpause()
-            self.is_paused = False
-            self.title_label.config(text=os.path.basename(self.playlist[self.current_idx]).upper())
+    # LCD 디스플레이 (HTML/CSS로 구현)
+    st.markdown(f"""
+        <div class="lcd-display">
+            <div class="lcd-time">-- : --</div>
+            <div class="lcd-title">TRACK {st.session_state.current_index + 1}: {current_song_name}</div>
+            <div style="font-size: 0.8em; color: #00aa00; margin-top:5px;">{'I' * 24}</div>
+        </div>
+    """, unsafe_allow_html=True)
 
-    def stop_song(self):
-        pygame.mixer.music.stop()
-        self.seek_offset = 0
-        self.progress_scale.set(0)
-        self.time_label.config(text="00:00 / 00:00")
-        self.title_label.config(text="STOPPED")
-        for bar in self.bars: self.canvas.coords(bar, self.canvas.coords(bar)[0], 60, self.canvas.coords(bar)[2], 60)
+    # 컨트롤 버튼 (컬럼으로 배치)
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+    
+    with col1:
+        st.button("◀◀ PREV", on_click=prev_song)
+    with col2:
+        # Streamlit은 자동 재생 제어가 까다로우므로 플레이 버튼은 오디오 위젯으로 대체됨
+        st.button("STOP ■", on_click=lambda: None) 
+    with col3:
+        st.button("NEXT ▶▶", on_click=next_song)
+    with col4:
+        if st.button("CLEAR"):
+            clear_playlist()
 
-    def next_song(self):
-        if self.current_idx < len(self.playlist) - 1:
-            self.listbox.selection_clear(0, tk.END)
-            self.listbox.selection_set(self.current_idx + 1)
-            self.play_song()
+    st.markdown("---")
 
-    def prev_song(self):
-        if self.current_idx > 0:
-            self.listbox.selection_clear(0, tk.END)
-            self.listbox.selection_set(self.current_idx - 1)
-            self.play_song()
+    # 오디오 플레이어 (Pygame 대신 st.audio 사용)
+    if current_file:
+        st.audio(current_file, format='audio/mp3')
+        st.caption("Volume is controlled by your device system.")
+    else:
+        st.info("Please add music files above.")
 
-    def delete_selected_song(self):
-        selected = self.listbox.curselection()
-        if selected:
-            idx = selected[0]
-            if idx == self.current_idx: self.stop_song()
-            self.listbox.delete(idx)
-            self.playlist.pop(idx)
-            current_items = [os.path.basename(f) for f in self.playlist]
-            self.listbox.delete(0, tk.END)
-            for i, name in enumerate(current_items): self.listbox.insert(tk.END, f"{i+1}. {name}")
+    st.markdown('</div>', unsafe_allow_html=True) # 메인 패널 닫기
 
-    def set_volume(self, val):
-        pygame.mixer.music.set_volume(float(val)/100)
-        self.vol_label.config(text=f"{val}%")
-
-    def on_drag_start(self, event): self.is_dragging = True
-
-    def on_scale_touch(self, val):
-        if self.is_dragging and self.song_length > 0:
-            curr_min, curr_sec = divmod(int(float(val)), 60)
-            total_min, total_sec = divmod(int(self.song_length), 60)
-            self.time_label.config(text=f"{curr_min:02}:{curr_sec:02} / {total_min:02}:{total_sec:02}")
-
-    def seek_music(self, event):
-        if self.current_idx != -1:
-            target_time = self.progress_scale.get()
-            self.seek_offset = target_time
-            pygame.mixer.music.play(start=target_time)
-            if self.is_paused: pygame.mixer.music.pause()
-            self.is_dragging = False
-
-    def update_timer(self):
-        if pygame.mixer.music.get_busy() and not self.is_paused and not self.is_dragging:
-            current_pos = self.seek_offset + (pygame.mixer.music.get_pos() / 1000)
-            self.progress_scale.set(current_pos)
-            curr_min, curr_sec = divmod(int(current_pos), 60)
-            total_min, total_sec = divmod(int(self.song_length), 60)
-            self.time_label.config(text=f"{curr_min:02}:{curr_sec:02} / {total_min:02}:{total_sec:02}")
-            for bar in self.bars:
-                h = random.randint(5, 55)
-                x1, _, x2, _ = self.canvas.coords(bar)
-                self.canvas.coords(bar, x1, 60-h, x2, 60)
-        self.root.after(100, self.update_timer)
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = DenonUltimatePlayer(root)
-    root.mainloop()
+# --- 5. 플레이리스트 목록 표시 ---
+with st.expander("TRACK LIST", expanded=True):
+    if st.session_state.playlist:
+        for idx, file in enumerate(st.session_state.playlist):
+            # 현재 재생 중인 곡 강조
+            prefix = "▶ " if idx == st.session_state.current_index else f"{idx+1}. "
+            if st.button(f"{prefix}{file.name}", key=f"song_{idx}"):
+                st.session_state.current_index = idx
+                st.rerun()
+    else:
+        st.write("No tracks loaded.")
