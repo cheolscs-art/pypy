@@ -1,2 +1,0 @@
-# pypy
-scspy
